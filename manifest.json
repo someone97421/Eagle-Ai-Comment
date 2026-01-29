@@ -1,0 +1,19 @@
+{
+    "id": "113562ac-5997-4b46-9d28-fd178ae8fa96",
+    "version": "1.0.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "Eagle AI 自动注释",
+    "logo": "logo.png",
+    "keywords": ["ai", "openai", "comment"],
+    "devTools": false,
+    "main": {
+        "url": "index.html",
+        "width": 360,
+        "height": 600
+    },
+    "permissions": [
+        "item",
+        "plugin"
+    ]
+}
