@@ -1,3 +1,5 @@
+修改规则，如果遇到不支持的格式则使用预览图，现在几乎兼容任何格式  
+
 # Eagle AI Auto Tagging Plugin (AI 智能注释)
 
 ![Eagle Plugin](https://img.shields.io/badge/Eagle-Plugin-blue.svg) ![License](https://img.shields.io/badge/license-MIT-green)
