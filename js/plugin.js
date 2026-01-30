@@ -61,19 +61,44 @@ async function runTask() {
 	btn.innerText = "处理中...";
 	appendLog("--- 开始任务 ---", "info");
 
+	// 定义浏览器原生支持可以直接读取的图片格式
+	const browserSupported = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg', 'avif'];
+
 	for (let i = 0; i < items.length; i++) {
 		const item = items[i];
 		appendLog(`[${i + 1}/${items.length}] 处理: ${item.name}`, "info");
 
 		try {
-			// 1. 处理图片
-			const base64 = await processImage(item.fileURL, appConfig.resizeLimit);
+			let base64;
+			const ext = item.ext ? item.ext.toLowerCase() : "";
 
-			// 2. 调用 API
+			// --- 核心修改逻辑开始 ---
+			if (browserSupported.includes(ext)) {
+				// 1. 对于浏览器支持的格式（jpg/png等）：直接读取原图
+				base64 = await processImage(item.fileURL, appConfig.resizeLimit);
+			} else {
+				// 2. 对于不支持的格式（psd/ai/视频等）：调用 Eagle 原生能力获取缩略图
+				// eagle.app.createThumbnailFromPath 会返回一个 NativeImage 对象
+				appendLog(`ℹ️ 格式[${ext}]使用预览图模式`, "info");
+
+				const nativeImage = await eagle.app.createThumbnailFromPath(item.filePath, {
+					width: appConfig.resizeLimit,
+					height: appConfig.resizeLimit
+				});
+
+				if (!nativeImage || nativeImage.isEmpty()) {
+					throw new Error("无法生成该文件的预览图");
+				}
+
+				// 直接获取 Base64 (API 返回的 NativeImage 自带转 Base64 功能)
+				base64 = nativeImage.toDataURL();
+			}
+			// --- 核心修改逻辑结束 ---
+
+			// 3. 调用 API
 			const comment = await callLLM(base64);
 
-			// 3. 写入 Eagle 注释 (关键修改点)
-			// 如果你想保留原有注释，可以用: item.annotation = (item.annotation || "") + "\n\n" + comment;
+			// 4. 写入 Eagle 注释
 			item.annotation = comment;
 			await item.save();
 
@@ -215,13 +240,11 @@ function processImage(fileUrl, maxSize) {
 	});
 }
 
-// ---------------- 替换后的 callLLM 函数 ----------------
+// ---------------- API 调用函数 ----------------
 async function callLLM(base64Image) {
-	// 1. 自动清洗 URL：去掉用户可能误填的 /chat/completions 后缀，并去掉末尾斜杠
+	// 1. 自动清洗 URL
 	let cleanUrl = appConfig.apiUrl.trim();
-	// 如果以 /chat/completions 结尾，去掉它
 	cleanUrl = cleanUrl.replace(/\/chat\/completions\/?$/, "");
-	// 去掉末尾多余的斜杠
 	cleanUrl = cleanUrl.replace(/\/+$/, "");
 
 	// 2. 构造请求体
@@ -234,19 +257,16 @@ async function callLLM(base64Image) {
 		max_tokens: appConfig.maxTokens
 	};
 
-	// ModelScope/DashScope 的某些模型对 temperature 敏感，非推理模式才传
 	if (!appConfig.useReasoning) {
 		payload.temperature = appConfig.temperature;
 	}
 
-	// 3. 打印调试日志（方便排查）
 	console.log("正在请求 URL:", `${cleanUrl}/chat/completions`);
 
 	const resp = await fetch(`${cleanUrl}/chat/completions`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			// 确保 Key 里面没有多余的空格
 			'Authorization': `Bearer ${appConfig.apiKey.trim()}`
 		},
 		body: JSON.stringify(payload)
@@ -254,7 +274,6 @@ async function callLLM(base64Image) {
 
 	if (!resp.ok) {
 		const errText = await resp.text();
-		// 尝试解析详细错误信息
 		let errMsg = errText;
 		try {
 			const errJson = JSON.parse(errText);
